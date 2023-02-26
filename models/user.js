@@ -1,7 +1,9 @@
 const Joi = require("joi");
-const { Schema, model } = require("mongoose");
+const { Schema, model, SchemaTypes } = require("mongoose");
 
-const usersSchema = Schema(
+const emailRegexp = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+
+const userSchema = Schema(
   {
     password: {
       type: String,
@@ -9,6 +11,7 @@ const usersSchema = Schema(
     },
     email: {
       type: String,
+      match: emailRegexp,
       required: [true, "Email is required"],
       unique: true,
     },
@@ -21,30 +24,41 @@ const usersSchema = Schema(
       type: String,
       default: null,
     },
+    owner: {
+      type: SchemaTypes.ObjectId,
+      ref: "user",
+    },
   },
   { versionKey: false, timestamps: true }
 );
 
-usersSchema.post("save", (error, date, next) => {
+userSchema.post("save", (error, date, next) => {
+  if (error.code === 11000) {
+    error.status = 409;
+    error.message = "Email in use";
+    return next();
+  }
   error.status = 400;
   next();
 });
 
-const addSchema = Joi.object({
+const registerSchema = Joi.object({
   password: Joi.string().required(),
-  email: Joi.string().required().unique(),
+  email: Joi.string().pattern(emailRegexp).required(),
   subscription: Joi.string().valid("starter", "pro", "business"),
   token: Joi.string().token(),
 });
+const loginSchema = Joi.object({
+  password: Joi.string().required(),
+  email: Joi.string().pattern(emailRegexp).required(),
+});
 
-// const updateFavoriteSchema = Joi.object({
-//   favorite: Joi.boolean().required(),
-// });
 const schemas = {
-  addSchema,
+  registerSchema,
+  loginSchema,
 };
 
-const User = model("user", usersSchema);
+const User = model("user", userSchema);
 
 module.exports = {
   User,
