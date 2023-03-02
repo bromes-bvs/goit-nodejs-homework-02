@@ -3,7 +3,20 @@ const ctrlWrp = require("../helpers/controllersWrapper");
 const { Contact, schemas } = require("../models/contact");
 
 const getAll = async (req, res, next) => {
-  const result = await Contact.find();
+  const { _id: owner } = req.user;
+  const { page = 1, limit = 20, favorite = null } = req.query;
+  const skip = (page - 1) * limit;
+
+  if (favorite) {
+    try {
+      const result = await Contact.find({ favorite });
+      return res.json(result);
+    } catch (error) {
+      throw HttpError(400, "Check the correctness of the entered data");
+    }
+  }
+
+  const result = await Contact.find({ owner }, null, { skip, limit });
   res.json(result);
 };
 
@@ -18,12 +31,14 @@ const getById = async (req, res, next) => {
 
 const addContact = async (req, res, next) => {
   const body = req.body;
+  const { _id: owner } = req.user;
+
   const { error } = schemas.addSchema.validate(body);
   if (error) {
     throw HttpError(400, "Missing required name field");
   }
 
-  const result = await Contact.create(body);
+  const result = await Contact.create({ ...body, owner });
   res.status(201).json(result);
 };
 
