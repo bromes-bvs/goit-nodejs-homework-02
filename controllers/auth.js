@@ -1,20 +1,32 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const Jimp = require("jimp");
+const path = require("path");
+const fs = require("fs/promises");
+
 const { User, schemas } = require("../models/user");
 const { HttpError } = require("../helpers/HttpError");
 const hashPassword = require("../helpers/hashPassword");
 const ctrlWrp = require("../helpers/controllersWrapper");
 
 const { SECRET_KEY } = process.env;
+const avatarPath = path.join(__dirname, "../", "public", "avatars");
 
 const signup = async (req, res) => {
-  const { password } = req.body;
+  const { password, email } = req.body;
   const { error } = schemas.registerSchema.validate(req.body);
   if (error) {
     throw HttpError(400, error.message);
   }
   const hashPass = await hashPassword(password);
-  const result = await User.create({ ...req.body, password: hashPass });
+  const avatarURL = gravatar.url(email);
+
+  const result = await User.create({
+    ...req.body,
+    password: hashPass,
+    avatarURL,
+  });
   res.status(201).json({
     user: {
       email: result.email,
@@ -85,10 +97,33 @@ const updateSubscribe = async (req, res) => {
   });
 };
 
+const updateAvatar = async (req, res) => {
+  const { path: tempPath, originalname } = req.file;
+  const { _id } = req.user;
+
+  await Jimp.read(tempPath)
+    .then((image) => {
+      return image.resize(250, 250).write(tempPath);
+    })
+    .catch((err) => {
+      throw HttpError(400, "Something wrong with your image");
+    });
+
+  const filename = `${_id}_${originalname}`;
+  const resultUpload = path.join(avatarPath, filename);
+  const avatarURL = path.join("avatars", filename);
+  await fs.rename(tempPath, resultUpload);
+
+  await User.findByIdAndUpdate(_id, { avatarURL });
+
+  res.status(200).json({ avatarURL });
+};
+
 module.exports = {
   signup: ctrlWrp(signup),
   login: ctrlWrp(login),
   getCurrent: ctrlWrp(getCurrent),
   logout: ctrlWrp(logout),
   updateSubscribe: ctrlWrp(updateSubscribe),
+  updateAvatar: ctrlWrp(updateAvatar),
 };
